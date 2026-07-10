@@ -1,0 +1,43 @@
+name: Stock Check
+
+on:
+  schedule:
+    # Runs every 5 minutes - this is the shortest interval GitHub Actions
+    # reliably honours. Schedules run in UTC and can occasionally lag a
+    # few minutes during busy periods - that's normal.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # lets you manually trigger a run from the Actions tab
+
+jobs:
+  check-stock:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed so the workflow can commit the updated state file
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run stock checker
+        env:
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          TO_EMAIL: ${{ secrets.TO_EMAIL }}
+        run: python check_stock.py
+
+      - name: Save updated stock state
+        run: |
+          git config user.name "stock-checker-bot"
+          git config user.email "actions@github.com"
+          git add stock_state.json
+          git diff --staged --quiet || git commit -m "Update stock state [skip ci]"
+          git push
